@@ -1,0 +1,114 @@
+此文更新于2017-02-21，如你早于这个时间部署，可能要升级后端
+
+如果你要尝试这个新功能，首先把服务端和客户端均更新到最新，客户端C#需要4.0.5版或以上，SSR-android需要3.3.3版本或以上。
+
+第一部分：直接修改服务端配置文件大法，仅适用于使用单用户配置的情况
+首先是服务端的配置
+服务端把协议(protocol)配置为 auth_aes128_md5 或 auth_aes128_sha1，然后在协议参数(protocol_param)配置所有可用的用户id及其密码，示例如下：
+
+        "protocol": "auth_aes128_sha1",
+        "protocol_param": "64#12345:breakwa11,233:zhihuyaowan",
+
+含义：
+在#前面的表示每个用户的最大客户端数，照着写这个值或者不填都可以，但必须有#号。在#后，以英文逗号分隔所有的用户，而英文冒号的前面是用户的id，注意这个id必须是范围在 1~2147483647之间，后面的是用户的密码，密码不能有特殊符号，建议仅使用数字和大小写字母
+
+然后是客户端的配置（此处配置同样适合下文的其它配置模式）
+客户端方面非常简单，需要使用用户id为12345的连接，那么在客户端的协议参数(protocol_param)里面填写 12345:breakwa11 就行了，如果使用id为233的同理，其它参数服务端怎么配置的就怎么写
+
+那既然多用户可以单端口了，那能不能做得更像一个网站？完全可以的，如果是http的话，服务端安装一个nginx之类，把端口开在8080（监听127.0.0.1），然后SSR的端口开在80，同时在SSR的user-config.json里修改参数 "redirect" : "127.0.0.1:8080", 这时，直接用浏览器打开，就可以直接看到你开的网站了，而改成用SSR客户端连接就成了服务端了。不过注意的是这时候最好要开相应的混淆哦ヽ(´▽｀)ノ
+
+目前这个是刚出的功能，还在测试中，后端和面板还没有相应的支持，也没有流量控制等，建议几个人自己合玩的时候可以这样用，特别地在某些学校或公司这个功能非常好用的哦。
+
+第二部分：使用mudbjson模式配置（适合单服务器多人合用或试用服务器）
+2017-02-21更新：
+现mudbjson模式多用户已支持，简要说明如下：
+首先先创建对应的用户id，如果这个id大于65535，那么此用户仅用于多用户模式，小于等于65535时会同时监听这个端口。然后创建多用户端口，相应的protocol_param里就填写"#"就行了，以下是配置示例：
+
+[
+    {
+        "d": 0,
+        "enable": 1,
+        "method": "aes-128-cfb",
+        "obfs": "tls1.2_ticket_auth_compatible",
+        "passwd": "vwHF%35j",
+        "port": 12345,
+        "protocol": "auth_aes128_sha1",
+        "protocol_param": "#",
+        "transfer_enable": 1125899906842624,
+        "u": 0,
+        "user": "12345"
+    },
+    {
+        "d": 0,
+        "enable": 1,
+        "method": "aes-128-cfb",
+        "obfs": "tls1.2_ticket_auth_compatible",
+        "passwd": "E&iWmlxu",
+        "port": 10001,
+        "protocol": "auth_sha1_v4",
+        "transfer_enable": 536870912,
+        "u": 0,
+        "user": "10001"
+    },
+    {
+        "d": 0,
+        "enable": 1,
+        "method": "aes-128-cfb",
+        "obfs": "tls1.2_ticket_auth_compatible",
+        "passwd": "4~fGiKeY",
+        "port": 100002,
+        "protocol": "auth_sha1_v4",
+        "transfer_enable": 10737418240,
+        "u": 0,
+        "user": "100002"
+    }
+]
+
+在以上例子中，端口12345是多用户端口（可看成一个公共用户，但无法直接使用），有两个子用户，一个是10001，一个是100002，而10001用户，既可以使用10001端口，也能通过多用户方式使用12345端口。而100002用户只能使用端口12345。在使用端口12345时，实际的使用流量会统计到10001或100002上。注意的是用户10001在配置客户端使用多用户端口12345的话，配置密码为"vwHF%35j"，即除了协议参数均填写此端口的配置，仅协议参数改为"10001:E&iWmlxu"即可。
+
+其它：在使用mujson_mgr.py脚本添加协议参数时请使用-G且参数使用英文双引号包起来
+如有不明白可留言问
+
+第三部分：使用面板支持（适合站长多服务器下使用）
+2017-01-24更新：
+现在已经有支持此单端口多用户的面板及相应的后端，具体参见 https://github.com/esdeathlove/ss-panel-v3-mod
+
+2017-02-21更新：
+如果使用老面板，包括sspanel和WHMCS等，后端更新到最新后，那么可以在user-config.json内，修改或添加如下字段
+"additional_ports" : {
+    "6666": {
+        "passwd": "pubpassword",
+        "method": "aes-128-ctr",
+        "protocol": "auth_aes128_md5",
+        "protocol_param": "#",
+        "obfs": "tls1.2_ticket_auth_compatible",
+        "obfs_param": ""
+    }
+},
+其中6666是那个端口（如果要设置多个，就additional_ports内再添加一个，注意逗号分隔），protocol必须为auth_aes128_md5或auth_aes128_sha1，protocol_param只需且必须写一个#。（直接复制以上内容时记得修改密码配置）
+
+第四部分：高级端口转发
+如果设置多个多用户端口，想设置不同端口不同的转发规则以最大化伪装为其它服务，例如开了80端口和443端口作为多用户端口（以additional_ports方式作为示例）：
+"additional_ports" : {
+    "80": {
+        "passwd": "pubpassword",
+        "method": "aes-128-ctr",
+        "protocol": "auth_aes128_md5",
+        "protocol_param": "#",
+        "obfs": "tls1.2_ticket_auth_compatible",
+        "obfs_param": ""
+    },
+    "443": {
+        "passwd": "pubpassword",
+        "method": "aes-128-ctr",
+        "protocol": "auth_aes128_md5",
+        "protocol_param": "#",
+        "obfs": "tls1.2_ticket_auth_compatible",
+        "obfs_param": ""
+    }
+},
+同时本地的nginx/apache开启端口1080和1443，那么在user-config.json里修改如下参数：
+"redirect" : ["*:80#127.0.0.1:1080", "*:443#127.0.0.1:1443"],
+
+配置好后，直接访问80或443端口，将是个正常的网站，用SSR去连接则为代理服务。
+其它：nginx的rewrite规则默认会使用监听的端口，这时会导致rewrite有问题，需要指定一下端口号
